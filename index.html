@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Météo Pêche — Landéhen / Dahouet</title>
+
+  <!-- ── PWA ──────────────────────────────────────────── -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0d1b2a" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- iOS Safari -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Météo Pêche" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <!-- ────────────────────────────────────────────────── -->
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0a1520;
+      --card:     #0f2035;
+      --card2:    #162840;
+      --border:   #1e3a5f;
+      --accent:   #4fc3f7;
+      --accent2:  #81d4fa;
+      --text:     #d0e8f8;
+      --muted:    #5a8099;
+      --warn:     #ffa726;
+      --danger:   #ef5350;
+      --ok:       #66bb6a;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      min-height: 100vh;
+    }
+
+    /* ───── Header ───── */
+    header {
+      background: #060e18;
+      border-bottom: 2px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 0;
+      z-index: 1000;
+    }
+
+    header h1 {
+      font-size: 1.25em;
+      font-weight: 700;
+      color: var(--accent);
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .btn {
+      background: #1565c0;
+      color: #fff;
+      border: none;
+      padding: 4px 10px;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .btn:hover { background: #1976d2; }
+    .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+    .last-update { font-size: 10px; color: var(--muted); margin-left: auto; }
+
+    /* ───── Grid ───── */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      padding: 14px;
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+    /* ───── Card ───── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .card-head {
+      background: #08111d;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-head h2 {
+      font-size: 0.95em;
+      font-weight: 600;
+      color: var(--accent);
+      flex: 1;
+    }
+
+    .card-body { padding: 12px; flex: 1; }
+
+    /* ───── Loading / Error ───── */
+    .loading, .no-key {
+      color: var(--muted);
+      text-align: center;
+      padding: 36px 16px;
+      font-style: italic;
+      font-size: 12px;
+    }
+
+    .error {
+      color: #ef9a9a;
+      background: rgba(239,83,80,0.08);
+      border: 1px solid rgba(239,83,80,0.3);
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    /* ───── Météo sections ───── */
+    .meteo-section { padding: 10px 12px; }
+    .meteo-section + .meteo-section { border-top: 1px solid var(--border); }
+    .section-lbl { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 0.8px; text-transform: uppercase; margin-bottom: 8px; }
+
+    /* Semaine */
+    .week-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .day-card { background: var(--bg); border-radius: 7px; padding: 8px 7px; text-align: center; min-width: 62px; flex-shrink: 0; }
+    /* Météo semaine : 7 cartes pleine largeur */
+    .week-fill { overflow-x: hidden; }
+    .week-fill .day-card { flex: 1; min-width: 0; flex-shrink: 1; padding: 8px 4px; }
+    .day-card.today { border: 1px solid var(--accent); }
+    .day-name { color: var(--accent); font-weight: 700; font-size: 10px; }
+    .day-icon { font-size: 22px; margin: 4px 0; }
+    .day-temps { display: flex; gap: 5px; justify-content: center; font-size: 12px; }
+    .day-max { font-weight: 700; }
+    .day-min { color: var(--muted); }
+    .day-rain { font-size: 10px; color: #90caf9; margin-top: 3px; }
+
+    /* Heure par heure (horizontal) — layout deux colonnes */
+    .hour-outer { display: flex; align-items: stretch; }
+    .hour-lbl-col {
+      display: flex; flex-direction: column;
+      min-width: 65px; flex-shrink: 0;
+      background: var(--card); position: relative; z-index: 3;
+      border-right: 1px solid rgba(30,58,95,0.4);
+    }
+    .hlr {
+      display: flex; align-items: center;
+      padding: 0 6px 0 8px;
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      white-space: nowrap; box-sizing: border-box; flex-shrink: 0;
+    }
+    .hour-outer .hour-scroll { flex: 1; min-width: 0; }
+    .hour-scroll { overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .hour-table { border-collapse: collapse; white-space: nowrap; font-size: 12px; }
+    .hour-table td { padding: 3px 7px; text-align: center; border-left: 1px solid rgba(30,58,95,0.25); }
+    .h-day { background: #08111d; color: var(--accent2); font-weight: 700; font-size: 10px; text-align: center; padding: 4px 0; }
+    .h-hour { color: var(--muted); font-size: 11px; }
+    .rain-trace td { background: rgba(33,150,243,0.07); }
+    .rain-light td { background: rgba(33,150,243,0.16); }
+    .rain-med   td { background: rgba(33,150,243,0.28); }
+    .rain-heavy td { background: rgba(33,150,243,0.42); }
+
+    /* ───── Windy ───── */
+    .windy-frame {
+      width: 100%;
+      height: 400px;
+      border: none;
+      border-radius: 0 0 0 0;
+      display: block;
+      flex: 1;
+    }
+
+    .windy-links {
+      display: flex;
+      gap: 6px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+      align-items: center;
+      border-top: 1px solid var(--border);
+    }
+
+    .windy-links a {
+      font-size: 11px;
+      color: var(--accent);
+      text-decoration: none;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .windy-links a:hover { background: var(--card2); }
+
+    /* ───── Radar ───── */
+    #leaflet-map {
+      height: 300px;
+      border-radius: 5px;
+    }
+
+    .layer-btns {
+      display: flex;
+      gap: 6px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .layer-btn {
+      font-size: 11px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 3px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .layer-btn:hover  { background: var(--card2); }
+    .layer-btn.active { border-color: var(--accent); color: var(--accent); background: var(--card2); }
+
+    .radar-no-key {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+      padding: 8px 0;
+    }
+
+    .radar-no-key a { color: var(--accent); }
+
+    /* ───── Marées semaine ───── */
+    .tide-mini { font-size: 10px; margin-top: 2px; display: flex; align-items: center; gap: 3px; }
+    .tide-pm   { color: var(--accent2); }
+    .tide-bm   { color: var(--warn); }
+
+    /* ───── Charts ───── */
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+    }
+
+    /* ───── Wave table ───── */
+    .wave-scroll {
+      overflow-x: auto;
+      margin-top: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .wave-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+
+    .wave-table th {
+      color: var(--accent);
+      padding: 4px 5px;
+      text-align: center;
+      font-size: 10px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    .wave-table td {
+      padding: 3px 5px;
+      text-align: center;
+      border-bottom: 1px solid rgba(30,58,95,0.35);
+      white-space: nowrap;
+    }
+
+    .wave-day td {
+      background: #08111d;
+      color: var(--accent2);
+      font-weight: 700;
+      font-size: 11px;
+      text-align: left;
+      padding: 5px 8px;
+    }
+
+    .hs-calm   { color: #66bb6a; font-weight: 700; }
+    .hs-mod    { color: #fff176; font-weight: 700; }
+    .hs-rough  { color: var(--warn); font-weight: 700; }
+    .hs-storm  { color: var(--danger); font-weight: 700; }
+
+    /* ───── Scrollbars (webkit) ───── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+    /* ───── Mobile ───── */
+    @media (max-width: 600px) {
+      /* Semaine : scroll horizontal, chaque jour garde sa largeur minimale */
+      .week-fill { overflow-x: auto; }
+      .week-fill .day-card { flex: 0 0 auto; min-width: 66px; padding: 8px 7px; }
+
+      /* Boutons plus hauts et plus faciles à tapper */
+      .btn        { padding: 9px 14px; font-size: 13px; min-height: 42px; }
+      .btn-sm     { padding: 7px 12px; font-size: 12px; min-height: 38px; }
+      .windy-links a { padding: 7px 12px; font-size: 12px; min-height: 38px;
+                        display: flex; align-items: center; }
+      .windy-links  { gap: 8px; padding: 10px 12px; }
+      .windy-frame  { flex: 0 0 35vh; height: 35vh; }
+      /* Masquer scrollbars sur mobile (défilement tactile suffit) */
+      .hour-scroll  { scrollbar-width: none; }
+      .hour-scroll::-webkit-scrollbar { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🎣 Météo Pêche — Landéhen / Dahouet</h1>
+  <button class="btn btn-sm" onclick="refreshAll()">↺ Actualiser</button>
+  <span class="last-update" id="last-update"></span>
+</header>
+
+<main>
+
+  <!-- ── Météo ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2 id="meteo-title">🌤️ Météo Landéhen</h2>
+    </div>
+    <div class="windy-links">
+      <a href="#" onclick="setMeteoLoc('landehen');return false">🌿 Landéhen</a>
+      <a href="#" onclick="setMeteoLoc('saintaaron');return false">🏘 Saint-Aaron</a>
+      <a href="#" onclick="toggleMeteoSearch();return false">🔍 Rechercher</a>
+    </div>
+    <div id="meteo-search-row" style="display:none;padding:6px 12px;gap:6px;align-items:center;border-bottom:1px solid var(--border);flex-wrap:wrap" class="windy-links">
+      <input id="meteo-search-input" type="text" placeholder="Nom de commune…"
+        style="flex:1;min-width:140px;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:12px"
+        onkeydown="if(event.key==='Enter')searchMeteoCommune()" />
+      <button class="btn btn-sm" onclick="searchMeteoCommune()">OK</button>
+      <span id="meteo-search-status" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="meteo-section">
+        <div class="section-lbl">📅 Prévisions semaine</div>
+        <div class="week-row week-fill" id="week-wrap"><div class="loading">Chargement…</div></div>
+      </div>
+      <div class="meteo-section">
+        <div class="section-lbl">🕐 Heure par heure — 48 h</div>
+        <div id="meteo-wrap"><div class="loading">Chargement…</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Radar Pluie — Windy ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>🌧️ Radar — Windy</h2>
+      <button id="windy-lock-btn" class="btn btn-sm" onclick="toggleWindyLock()"
+        title="Carte verrouillée — cliquer pour déverrouiller"
+        style="margin-left:auto">🔒 Carte</button>
+    </div>
+    <div class="card-body" style="padding:0;display:flex;flex-direction:column">
+      <div style="position:relative;flex-shrink:0">
+        <iframe id="windy-frame" class="windy-frame"
+          src="https://embed.windy.com/embed2.html?lat=48.4&lon=-2.57&zoom=9&level=surface&overlay=rain&product=ecmwf&menu=&message=true&marker=true&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=kt&metricTemp=%C2%B0C&radarRange=-1"
+          allowfullscreen>
+        </iframe>
+        <!-- Overlay avec trou pour le bouton Play natif Windy (left:10px bottom:20px 34×34px) -->
+        <!-- ov-a : tout sauf la zone du bas -->
+        <div id="windy-ov-a" style="position:absolute;top:0;left:0;right:0;bottom:54px;z-index:10;cursor:not-allowed"></div>
+        <!-- ov-b : bande gauche (0→10px) sur la hauteur du play -->
+        <div id="windy-ov-b" style="position:absolute;left:0;width:10px;top:calc(100% - 54px);bottom:0;z-index:10;cursor:not-allowed"></div>
+        <!-- ov-c : bande droite (44px→) sur la hauteur du play -->
+        <div id="windy-ov-c" style="position:absolute;left:44px;right:0;top:calc(100% - 54px);bottom:0;z-index:10;cursor:not-allowed"></div>
+        <!-- ov-d : bande sous le play (0→20px du bas) -->
+        <div id="windy-ov-d" style="position:absolute;left:10px;width:34px;bottom:0;height:20px;z-index:10;cursor:not-allowed"></div>
+        <!-- Boutons zoom superposés — même style que les boutons natifs Windy -->
+        <div id="windy-zoom-over" style="position:absolute;top:36px;right:8px;z-index:20;display:flex;flex-direction:column">
+          <a href="#" onclick="zoomWindy(+1);return false" title="Zoomer"
+            style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:#fff;color:#333;font-size:18px;font-weight:700;text-decoration:none;border:2px solid rgba(0,0,0,0.25);border-radius:4px 4px 0 0;line-height:1">+</a>
+          <a href="#" onclick="zoomWindy(-1);return false" title="Dézoomer"
+            style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:#fff;color:#333;font-size:18px;font-weight:700;text-decoration:none;border:2px solid rgba(0,0,0,0.25);border-top:1px solid rgba(0,0,0,0.15);border-radius:0 0 4px 4px;line-height:1">−</a>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;border-top:1px solid var(--border)">
+        <!-- Overlays scrollables -->
+        <div class="windy-links" style="overflow-x:auto;flex-wrap:nowrap;flex:1;min-width:0;box-sizing:border-box;scrollbar-width:none;border:none;padding:0 8px">
+          <a href="#" onclick="setWindyOverlay('rain');return false"    style="flex-shrink:0">🌧 Pluie</a>
+          <a href="#" onclick="setWindyOverlay('wind');return false"    style="flex-shrink:0">💨 Vent</a>
+          <a href="#" onclick="setWindyOverlay('gust');return false"    style="flex-shrink:0">💨 Rafales</a>
+          <a href="#" onclick="setWindyOverlay('clouds');return false"  style="flex-shrink:0">☁️ Nuages</a>
+          <a href="#" onclick="setWindyOverlay('temp');return false"    style="flex-shrink:0">🌡 Temp.</a>
+          <a href="#" onclick="setWindyOverlay('waves');return false"   style="flex-shrink:0">🌊 Vagues</a>
+          <a href="#" onclick="setWindyOverlay('swell1');return false"  style="flex-shrink:0">🌊 Houle</a>
+          <a href="#" onclick="setWindyOverlay('swell2');return false"  style="flex-shrink:0">🌊 Houle 2</a>
+          <a href="#" onclick="setWindyOverlay('wwaves');return false"  style="flex-shrink:0">🌊 Mer vent</a>
+          <a href="#" onclick="setWindyOverlay('pressure');return false"style="flex-shrink:0">🔵 Pression</a>
+          <a href="#" onclick="setWindyOverlay('humidity');return false"style="flex-shrink:0">💧 Humidité</a>
+          <a href="#" onclick="setWindyOverlay('snowcover');return false"style="flex-shrink:0">❄️ Neige</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Marées Dahouet ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>🌊 Marées Dahouet</h2>
+    </div>
+    <div class="card-body" style="padding:0">
+      <div class="meteo-section">
+        <div class="section-lbl">📅 Prévisions 7 jours — PM / BM</div>
+        <div class="week-row" id="tide-week-row"><div class="loading">Chargement…</div></div>
+      </div>
+      <div style="border-top:1px solid var(--border)"></div>
+      <div id="wave-chart-wrap" style="padding:10px 12px 8px">
+        <div class="loading">Chargement vagues…</div>
+      </div>
+      <div style="border-top:1px solid var(--border)"></div>
+      <div id="wave-wrap" style="padding:0 0 8px">
+        <div class="loading">Chargement tableau vagues…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Webcams ── -->
+  <div class="card">
+    <div class="card-head">
+      <h2>📷 Webcams</h2>
+      <a id="webcam-ext" href="https://www.skaping.com/pleneuf-val-andre/casino/live" target="_blank"
+         style="font-size:10px;color:var(--accent);margin-left:auto">Plein écran ↗</a>
+    </div>
+    <div class="card-body" style="padding:0;display:flex;flex-direction:column">
+      <iframe id="webcam-frame"
+        src="https://www.skaping.com/pleneuf-val-andre/casino/live"
+        style="width:100%;height:420px;border:none;display:block;flex:1"
+        allowfullscreen
+        title="Webcam — Skaping">
+      </iframe>
+      <div class="windy-links">
+        <span style="font-size:11px;color:var(--muted);align-self:center">Vue :</span>
+        <a href="#" onclick="setWebcam('casino');return false">🏖 Val-André Casino</a>
+        <a href="#" onclick="setWebcam('dahouet');return false">⚓ Port de Dahouet</a>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+/* ================================================================
+   CONFIG
+   ================================================================ */
+const CFG = {
+  landehen:   { lat: 48.4411, lon: -2.5763, label: 'Landéhen'   },
+  saintaaron: { lat: 48.467,  lon: -2.483,  label: 'Saint-Aaron' },
+  dahouet:    { lat: 48.5879, lon: -2.5634 },
+  marine:     { lat: 48.650790, lon: -2.656640 },
+  mapCenter:  [48.52, -2.57],
+  mapZoom:    9,
+};
+let currentMeteoLoc = 'landehen';
+
+function setMeteoLoc(key) {
+  currentMeteoLoc = key;
+  const loc = CFG[key];
+  document.getElementById('meteo-title').textContent = `🌤️ Météo ${loc.label}`;
+  document.getElementById('meteo-search-row').style.display = 'none';
+  fetchMeteo();
+}
+
+function toggleMeteoSearch() {
+  const row = document.getElementById('meteo-search-row');
+  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+  if (row.style.display === 'flex') document.getElementById('meteo-search-input').focus();
+}
+
+async function searchMeteoCommune() {
+  const query  = document.getElementById('meteo-search-input').value.trim();
+  const status = document.getElementById('meteo-search-status');
+  if (!query) return;
+  status.textContent = 'Recherche…';
+  try {
+    const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=fr&format=json`);
+    const data = await res.json();
+    if (!data.results?.length) { status.textContent = 'Commune introuvable'; return; }
+    // Préférer un résultat en France
+    const r = data.results.find(x => x.country_code === 'FR') || data.results[0];
+    const label = [r.name, r.admin2 || r.admin1].filter(Boolean).join(', ');
+    // Stocker en tant que localité temporaire dans CFG
+    CFG._custom = { lat: r.latitude, lon: r.longitude, label };
+    currentMeteoLoc = '_custom';
+    document.getElementById('meteo-title').textContent = `🌤️ Météo ${label}`;
+    status.textContent = `📍 ${label}`;
+    fetchMeteo();
+  } catch (e) {
+    status.textContent = 'Erreur : ' + e.message;
+  }
+}
+
+/* ================================================================
+   WMO CODES
+   ================================================================ */
+const WMO = {
+  0:['☀️','Dégagé'], 1:['🌤️','Peu nuageux'], 2:['⛅','Nuageux'], 3:['☁️','Couvert'],
+  45:['🌫️','Brouillard'], 48:['🌫️','Brouillard givrant'],
+  51:['🌦️','Bruine légère'], 53:['🌦️','Bruine'], 55:['🌧️','Bruine forte'],
+  61:['🌧️','Pluie légère'], 63:['🌧️','Pluie'], 65:['🌧️','Pluie forte'],
+  71:['❄️','Neige légère'], 73:['❄️','Neige'], 75:['❄️','Neige forte'],
+  77:['🌨️','Grésil'],
+  80:['🌦️','Averses légères'], 81:['🌧️','Averses'], 82:['⛈️','Averses fortes'],
+  85:['🌨️','Averses neige'], 86:['🌨️','Averses neige fort'],
+  95:['⛈️','Orage'], 96:['⛈️','Orage + grêle'], 99:['⛈️','Orage violent'],
+};
+
+const DIRS16 = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSO','SO','OSO','O','ONO','NO','NNO'];
+
+function wmo(code)      { return WMO[code] || ['❓','Inconnu']; }
+function dirLabel(deg)  { return DIRS16[Math.round(deg / 22.5) % 16]; }
+function r(v, d = 1)    { return v != null ? (+v).toFixed(d) : '—'; }
+function ri(v)          { return v != null ? Math.round(+v) : '—'; }
+
+function fmtDay(isoOrTs) {
+  const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
+  return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+function fmtHHMM(isoOrTs) {
+  const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
+  return d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+function fmtDayShort(isoOrTs) {
+  const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
+  return d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+function fmtDateHHMM(isoOrTs) {
+  const d = typeof isoOrTs === 'number' ? new Date(isoOrTs * 1000) : new Date(isoOrTs);
+  return d.toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function refreshAll() {
+  fetchMeteo();
+  fetchWaves();
+  fetchTidesAM();
+  document.getElementById('last-update').textContent =
+    'Actualisé ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ================================================================
+   INIT
+   ================================================================ */
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('last-update').textContent =
+    'Chargé à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  Promise.allSettled([fetchMeteo(), fetchWaves(), fetchTidesAM()]);
+  // Auto-refresh toutes les 30 min
+  setTimeout(() => location.reload(), 30 * 60 * 1000);
+});
+
+/* ================================================================
+   MÉTÉO (Landéhen / Saint-Aaron)
+   ================================================================ */
+async function fetchMeteo() {
+  const loc = CFG[currentMeteoLoc];
+  const hourlyP = new URLSearchParams({
+    latitude: loc.lat, longitude: loc.lon,
+    hourly: 'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover',
+    timezone: 'Europe/Paris', forecast_days: 2,
+  });
+  const dailyP = new URLSearchParams({
+    latitude: loc.lat, longitude: loc.lon,
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max',
+    timezone: 'Europe/Paris', forecast_days: 7,
+  });
+  try {
+    const [hRes, dRes] = await Promise.all([
+      fetch('https://api.open-meteo.com/v1/forecast?' + hourlyP),
+      fetch('https://api.open-meteo.com/v1/forecast?' + dailyP),
+    ]);
+    if (!hRes.ok || !dRes.ok) throw new Error('HTTP error');
+    const [hData, dData] = await Promise.all([hRes.json(), dRes.json()]);
+    renderMeteoSemaine(dData.daily);
+    renderMeteoHeure(hData.hourly);
+  } catch (e) {
+    document.getElementById('meteo-wrap').innerHTML = `<div class="error">Erreur météo : ${e.message}</div>`;
+  }
+}
+
+function renderMeteoSemaine(d) {
+  const todayStr = new Date().toLocaleDateString('fr-FR');
+  let html = '';
+  for (let i = 0; i < d.time.length; i++) {
+    const date = new Date(d.time[i]);
+    const isToday = date.toLocaleDateString('fr-FR') === todayStr;
+    const dayName = isToday ? 'Auj.' : date.toLocaleDateString('fr-FR', { weekday: 'short' });
+    const dayNum  = date.getDate();
+    const [icon]  = wmo(d.weather_code[i]);
+    const rain    = d.precipitation_sum[i] ?? 0;
+    const prob    = d.precipitation_probability_max[i] ?? 0;
+    html += `<div class="day-card${isToday ? ' today' : ''}">
+      <div class="day-name">${dayName} ${dayNum}</div>
+      <div class="day-icon">${icon}</div>
+      <div class="day-temps">
+        <span class="day-max">${ri(d.temperature_2m_max[i])}°</span>
+        <span class="day-min">${ri(d.temperature_2m_min[i])}°</span>
+      </div>
+      <div class="day-rain">${prob}%${rain > 0 ? ' · ' + r(rain) + 'mm' : ''}</div>
+    </div>`;
+  }
+  document.getElementById('week-wrap').innerHTML = html;
+}
+
+function renderMeteoHeure(h) {
+  const now = Date.now();
+
+  // Collect indices for next 48h
+  const idx = [];
+  for (let i = 0; i < h.time.length; i++) {
+    if (new Date(h.time[i]).getTime() >= now - 3_600_000 && idx.length < 48) idx.push(i);
+  }
+
+  // Compute day groups for header colspan
+  const groups = [];
+  let lastDay = '';
+  for (const i of idx) {
+    const day = fmtDayShort(h.time[i]);
+    if (day !== lastDay) { groups.push({ label: fmtDay(h.time[i]), count: 1 }); lastDay = day; }
+    else groups[groups.length - 1].count++;
+  }
+
+  // Colonne labels (hors zone scrollable)
+  const METEO_LBLS = ['', 'Heure', 'Ciel', 'T°C', 'Prob.', 'Pluie', 'Nuages'];
+  let lblHtml = '<div class="hour-lbl-col">';
+  METEO_LBLS.forEach(t => { lblHtml += `<div class="hlr">${t}</div>`; });
+  lblHtml += '</div>';
+
+  // Table données seulement (sans colonne label)
+  let tbl = '<table class="hour-table"><tbody>';
+
+  // Day header row
+  tbl += '<tr>';
+  for (const g of groups) tbl += `<td colspan="${g.count}" class="h-day">${g.label}</td>`;
+  tbl += '</tr>';
+
+  // Hour row
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td class="h-hour">${fmtHHMM(h.time[i])}</td>`;
+  tbl += '</tr>';
+
+  // Ciel
+  tbl += '<tr>';
+  for (const i of idx) { const [icon] = wmo(h.weather_code[i]); tbl += `<td title="${wmo(h.weather_code[i])[1]}">${icon}</td>`; }
+  tbl += '</tr>';
+
+  // Température
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td><strong>${ri(h.temperature_2m[i])}°</strong></td>`;
+  tbl += '</tr>';
+
+  // Probabilité pluie
+  tbl += '<tr>';
+  for (const i of idx) {
+    const p = h.precipitation_probability[i] ?? 0;
+    const c = p > 70 ? 'var(--accent)' : p > 40 ? '#90caf9' : 'var(--muted)';
+    tbl += `<td style="color:${c}">${p}%</td>`;
+  }
+  tbl += '</tr>';
+
+  // Pluie mm
+  tbl += '<tr>';
+  for (const i of idx) {
+    const rain = h.precipitation[i] ?? 0;
+    let bg = '';
+    if (rain >= 3) bg = 'background:rgba(33,150,243,0.40)';
+    else if (rain >= 1) bg = 'background:rgba(33,150,243,0.25)';
+    else if (rain > 0) bg = 'background:rgba(33,150,243,0.12)';
+    tbl += `<td style="${bg}">${rain > 0 ? r(rain) + 'mm' : '—'}</td>`;
+  }
+  tbl += '</tr>';
+
+  // Nuages
+  tbl += '<tr>';
+  for (const i of idx) {
+    const c = h.cloud_cover[i] ?? 0;
+    const col = c > 80 ? 'var(--muted)' : c > 40 ? '#90caf9' : 'inherit';
+    tbl += `<td style="color:${col}">${c}%</td>`;
+  }
+  tbl += '</tr>';
+
+  tbl += '</tbody></table>';
+
+  document.getElementById('meteo-wrap').innerHTML =
+    `<div class="hour-outer">${lblHtml}<div class="hour-scroll">${tbl}</div></div>`;
+  syncTableLabels('meteo-wrap');
+}
+
+/* ================================================================
+   WEBCAMS — Skaping
+   ================================================================ */
+const WEBCAMS = {
+  casino:  { src: 'https://www.skaping.com/pleneuf-val-andre/casino/live',         label: 'Val-André Casino' },
+  dahouet: { src: 'https://www.skaping.com/pleneuf-val-andre/port-de-dahouet/live', label: 'Port de Dahouet' },
+};
+function setWebcam(key) {
+  const cam = WEBCAMS[key];
+  document.getElementById('webcam-frame').src = cam.src;
+  document.getElementById('webcam-ext').href  = cam.src;
+}
+
+/* ================================================================
+   RADAR — Windy embed
+   ================================================================ */
+let _windyZoom    = 9;    // zoom actuel
+let _windyOverlay = 'rain'; // overlay actuel
+function _buildWindySrc() {
+  return `https://embed.windy.com/embed2.html?lat=48.4&lon=-2.57&zoom=${_windyZoom}&level=surface`
+    + `&product=ecmwf&menu=&message=true&marker=true&calendar=now&pressure=`
+    + `&type=map&location=coordinates&detail=&metricWind=kt&metricTemp=%C2%B0C&radarRange=-1`
+    + `&overlay=${_windyOverlay}`;
+}
+
+function setWindyOverlay(overlay) {
+  _windyOverlay = overlay;
+  document.getElementById('windy-frame').src = _buildWindySrc();
+}
+
+function zoomWindy(delta) {
+  _windyZoom = Math.max(4, Math.min(14, _windyZoom + delta));
+  document.getElementById('windy-frame').src = _buildWindySrc();
+}
+
+let _windyLocked = true; // verrouillé par défaut (évite les déplacements accidentels)
+
+function _setWindyOverlays(locked) {
+  ['windy-ov-a','windy-ov-b','windy-ov-c','windy-ov-d'].forEach(id => {
+    document.getElementById(id).style.display = locked ? 'block' : 'none';
+  });
+  document.getElementById('windy-zoom-over').style.display = locked ? 'flex' : 'none';
+}
+
+function toggleWindyLock() {
+  _windyLocked = !_windyLocked;
+  _setWindyOverlays(_windyLocked);
+  const btn = document.getElementById('windy-lock-btn');
+  btn.innerHTML = _windyLocked ? '🔒 Carte' : '🔓 Carte';
+  btn.title     = _windyLocked ? 'Carte verrouillée — cliquer pour déverrouiller' : 'Carte déverrouillée — cliquer pour verrouiller';
+}
+
+/* ================================================================
+   MARÉES DAHOUET — api-maree.fr (données SHOM officielles)
+   Inscription gratuite : https://api-maree.fr/register
+   ================================================================ */
+const AM_CORR_MIN = -6; // correction ecart systématique api-maree.fr → maree.info
+const AM_API_KEY  = 'e3b34ffef47b5e4da34f5f7db292b521';
+
+function addMins(timeHHMM, mins) {
+  const [h, m] = timeHHMM.split(':').map(Number);
+  const t = ((h * 60 + m + mins) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+}
+
+async function fetchTidesAM() {
+  const wrap = document.getElementById('tide-week-row');
+  wrap.innerHTML = '<div class="loading">Chargement…</div>';
+
+  try {
+    const today = new Date();
+    const from  = today.toISOString().slice(0, 10);
+    const to    = new Date(today.getTime() + 6 * 86_400_000).toISOString().slice(0, 10);
+    const url   = `https://api-maree.fr/tide-extrema?site=dahouet&from=${from}&to=${to}&tz=Europe/Paris&key=${AM_API_KEY}`;
+
+    const res  = await fetch(url);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    if (!data.data || !Array.isArray(data.data)) throw new Error('Réponse invalide');
+
+    renderTideWeekAM(data.data);
+  } catch (e) {
+    wrap.innerHTML = `<div class="error">Erreur marées : ${e.message}</div>`;
+  }
+}
+
+function renderTideWeekAM(days) {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let html = '';
+  for (const day of days) {
+    const date    = new Date(day.date + 'T12:00:00');
+    const isToday = day.date === todayStr;
+    const label   = isToday ? 'Auj.' : date.toLocaleDateString('fr-FR', { weekday: 'short' });
+    let inner = '';
+    for (const e of (day.extrema || [])) {
+      const isPM   = e.type === 'PM';
+      const coef   = isPM && e.coef ? ` <span style="color:var(--muted);font-size:9px">(${e.coef})</span>` : '';
+      inner += `<div class="tide-mini ${isPM ? 'tide-pm' : 'tide-bm'}">
+        ${isPM ? '⬆' : '⬇'}&nbsp;${addMins(e.time, AM_CORR_MIN)}&nbsp;<b>${r(e.height, 2)}m</b>${coef}
+      </div>`;
+    }
+    if (!inner) inner = '<div class="tide-mini" style="color:var(--muted)">—</div>';
+    html += `<div class="day-card${isToday ? ' today' : ''}" style="min-width:92px;text-align:left">
+      <div class="day-name" style="margin-bottom:3px">${label}&nbsp;${date.getDate()}</div>
+      ${inner}
+    </div>`;
+  }
+  document.getElementById('tide-week-row').innerHTML = html;
+}
+
+/* ================================================================
+   VAGUES DAHOUET — Open-Meteo Marine
+   ================================================================ */
+let waveChart = null;
+
+async function fetchWaves() {
+  const wrap = document.getElementById('wave-wrap');
+  wrap.innerHTML = '<div class="loading">Chargement des vagues…</div>';
+
+  const marineP = new URLSearchParams({
+    latitude:      CFG.marine.lat,
+    longitude:     CFG.marine.lon,
+    hourly: [
+      'wave_height','wave_period','wave_direction',
+      'swell_wave_height','swell_wave_period','swell_wave_direction',
+      'wind_wave_height','wind_wave_period',
+    ].join(','),
+    timezone:      'Europe/Paris',
+    forecast_days: 5,
+  });
+
+  const windP = new URLSearchParams({
+    latitude:  CFG.marine.lat,
+    longitude: CFG.marine.lon,
+    hourly: 'wind_speed_10m,wind_direction_10m',
+    wind_speed_unit: 'kn',
+    timezone:        'Europe/Paris',
+    forecast_days:   7,
+  });
+
+  try {
+    const [mRes, wRes] = await Promise.all([
+      fetch('https://marine-api.open-meteo.com/v1/marine?' + marineP),
+      fetch('https://api.open-meteo.com/v1/forecast?'      + windP),
+    ]);
+    if (!mRes.ok) throw new Error('Marine HTTP ' + mRes.status);
+    if (!wRes.ok) throw new Error('Wind HTTP '   + wRes.status);
+    const [marine, wind] = await Promise.all([mRes.json(), wRes.json()]);
+    renderWaves(marine.hourly, wind.hourly);
+  } catch (e) {
+    wrap.innerHTML = `<div class="error">Erreur vagues : ${e.message}</div>`;
+    const cw = document.getElementById('wave-chart-wrap'); if (cw) cw.innerHTML = '';
+  }
+}
+
+function hsClass(h) {
+  if (h < 0.5) return 'hs-calm';
+  if (h < 1.0) return 'hs-mod';
+  if (h < 1.5) return 'hs-rough';
+  return 'hs-storm';
+}
+
+function windColor(spd) {
+  if (spd > 30) return 'var(--danger)';
+  if (spd > 20) return 'var(--warn)';
+  return 'inherit';
+}
+
+function renderWaves(m, w) {
+  const chartWrap = document.getElementById('wave-chart-wrap');
+  const wrap      = document.getElementById('wave-wrap');
+  chartWrap.innerHTML = `<div class="chart-wrap" style="height:160px"><canvas id="wave-canvas"></canvas></div>`;
+  wrap.innerHTML      = `<div id="wave-outer" style="padding:0 12px 8px"></div>`;
+
+  /* Build wind lookup by ISO time string */
+  const windMap = {};
+  if (w && w.time) {
+    w.time.forEach((t, i) => {
+      windMap[t] = { spd: w.wind_speed_10m[i], dir: w.wind_direction_10m[i] };
+    });
+  }
+
+  const now = new Date();
+
+  /* — Chart (every hour, 5 days) — */
+  const chartLbls = [], chartHs = [], chartSwell = [];
+  for (let i = 0; i < m.time.length; i++) {
+    const t = new Date(m.time[i]);
+    if (t < now) continue;
+    // Label toutes les 6h pour lisibilité, sinon chaîne vide
+    const lbl = t.getHours() % 6 === 0
+      ? t.toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit' })
+      : '';
+    chartLbls.push(lbl);
+    chartHs.push(m.wave_height[i]?.toFixed(2) ?? 0);
+    chartSwell.push(m.swell_wave_height[i]?.toFixed(2) ?? 0);
+  }
+
+  if (waveChart) waveChart.destroy();
+  const ctx = document.getElementById('wave-canvas').getContext('2d');
+  waveChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: chartLbls,
+      datasets: [
+        {
+          label: 'Hs total',
+          data: chartHs,
+          borderColor:     '#4fc3f7',
+          backgroundColor: 'rgba(79,195,247,0.10)',
+          fill: true, borderWidth: 2, pointRadius: 0, tension: 0.3,
+        },
+        {
+          label: 'Houle',
+          data: chartSwell,
+          borderColor: '#81c784',
+          backgroundColor: 'transparent',
+          borderWidth: 1.5, pointRadius: 0, tension: 0.3,
+          borderDash: [5, 5],
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      plugins: {
+        legend: { labels: { color: '#8ab4c8', boxWidth: 12, font: { size: 10 } } }
+      },
+      scales: {
+        x: { ticks: { color: '#5a8099', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: 'rgba(30,58,95,0.4)' } },
+        y: { min: 0, ticks: { color: '#5a8099', callback: v => v + ' m' }, grid: { color: 'rgba(30,58,95,0.6)' } }
+      }
+    }
+  });
+
+  /* — Tableau horizontal (toutes les heures, 5 jours) — */
+  const idx = [];
+  for (let i = 0; i < m.time.length; i++) {
+    const t = new Date(m.time[i]);
+    if (t < now) continue;
+    idx.push(i);
+  }
+
+  // Groupes par jour pour colspan
+  const groups = [];
+  let lastDay = '';
+  for (const i of idx) {
+    const day = fmtDayShort(m.time[i]);
+    if (day !== lastDay) { groups.push({ label: fmtDay(m.time[i]), count: 1 }); lastDay = day; }
+    else groups[groups.length - 1].count++;
+  }
+
+  // Colonne labels (hors zone scrollable)
+  const WAVE_LBLS = ['', 'Heure', 'Hs', 'Houle', 'Pér.', 'Dir. houle', 'V.mer', 'Vent nd', 'Dir. vent'];
+  let lblHtml = '<div class="hour-lbl-col">';
+  WAVE_LBLS.forEach(t => { lblHtml += `<div class="hlr">${t}</div>`; });
+  lblHtml += '</div>';
+
+  // Table données seulement (sans colonne label)
+  let tbl = '<table class="hour-table"><tbody>';
+
+  // En-tête jours
+  tbl += '<tr>';
+  for (const g of groups) tbl += `<td colspan="${g.count}" class="h-day">${g.label}</td>`;
+  tbl += '</tr>';
+
+  // Heure
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td class="h-hour">${fmtHHMM(m.time[i])}</td>`;
+  tbl += '</tr>';
+
+  // Hs total
+  tbl += '<tr>';
+  for (const i of idx) { const v = m.wave_height[i] ?? 0; tbl += `<td class="${hsClass(v)}">${r(v)}m</td>`; }
+  tbl += '</tr>';
+
+  // Houle hauteur
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td>${r(m.swell_wave_height[i] ?? 0)}m</td>`;
+  tbl += '</tr>';
+
+  // Houle période
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td>${ri(m.swell_wave_period[i] ?? 0)}s</td>`;
+  tbl += '</tr>';
+
+  // Direction houle
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td>${dirLabel(m.swell_wave_direction ? (m.swell_wave_direction[i] ?? 0) : 0)}</td>`;
+  tbl += '</tr>';
+
+  // Mer du vent
+  tbl += '<tr>';
+  for (const i of idx) tbl += `<td>${r(m.wind_wave_height[i] ?? 0)}m</td>`;
+  tbl += '</tr>';
+
+  // Vent (nœuds)
+  tbl += '<tr>';
+  for (const i of idx) {
+    const wd = windMap[m.time[i]] || {};
+    tbl += `<td style="color:${windColor(wd.spd)}">${wd.spd != null ? ri(wd.spd) : '—'}</td>`;
+  }
+  tbl += '</tr>';
+
+  // Direction vent
+  tbl += '<tr>';
+  for (const i of idx) { const wd = windMap[m.time[i]] || {}; tbl += `<td>${dirLabel(wd.dir ?? 0)}</td>`; }
+  tbl += '</tr>';
+
+  tbl += '</tbody></table>';
+
+  document.getElementById('wave-outer').innerHTML =
+    `<div class="hour-outer">${lblHtml}<div class="hour-scroll">${tbl}</div></div>`;
+  syncTableLabels('wave-outer');
+}
+
+/* Synchronise la hauteur des lignes labels avec les lignes du tableau */
+function syncTableLabels(wrapperId) {
+  requestAnimationFrame(() => {
+    const wrap = document.getElementById(wrapperId);
+    if (!wrap) return;
+    const lblRows = wrap.querySelectorAll('.hlr');
+    const tblRows = wrap.querySelectorAll('.hour-table tr');
+    tblRows.forEach((row, i) => {
+      if (lblRows[i]) lblRows[i].style.height = row.getBoundingClientRect().height + 'px';
+    });
+  });
+}
+</script>
+
+<!-- ── Enregistrement Service Worker PWA ─────────────── -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js')
+        .then(reg => console.log('SW enregistré :', reg.scope))
+        .catch(err => console.warn('SW échec :', err));
+    });
+  }
+</script>
+<!-- ──────────────────────────────────────────────────── -->
+</body>
+</html>

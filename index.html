@@ -9,7 +9,6 @@
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#0d1b2a" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <!-- iOS Safari -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Météo Pêche" />
@@ -146,11 +145,13 @@
 
     /* Semaine */
     .week-row { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
-    .day-card { background: var(--bg); border-radius: 7px; padding: 8px 7px; text-align: center; min-width: 62px; flex-shrink: 0; }
+    .day-card { background: var(--bg); border-radius: 7px; padding: 8px 7px; text-align: center; min-width: 62px; flex-shrink: 0; cursor: pointer; transition: background .15s, outline .15s; }
+    .day-card:hover { background: rgba(79,195,247,0.10); }
     /* Météo semaine : 7 cartes pleine largeur */
     .week-fill { overflow-x: hidden; }
     .week-fill .day-card { flex: 1; min-width: 0; flex-shrink: 1; padding: 8px 4px; }
     .day-card.today { border: 1px solid var(--accent); }
+    .day-card.selected { outline: 2px solid var(--accent); outline-offset: -2px; background: rgba(79,195,247,0.15); }
     .day-name { color: var(--accent); font-weight: 700; font-size: 10px; }
     .day-icon { font-size: 22px; margin: 4px 0; }
     .day-temps { display: flex; gap: 5px; justify-content: center; font-size: 12px; }
@@ -178,6 +179,9 @@
     .hour-table td { padding: 3px 7px; text-align: center; border-left: 1px solid rgba(30,58,95,0.25); }
     .h-day { background: #08111d; color: var(--accent2); font-weight: 700; font-size: 10px; text-align: center; padding: 4px 0; }
     .h-hour { color: var(--muted); font-size: 11px; }
+    /* Démarcation jours dans le tableau horaire */
+    .hour-table td.g-alt  { background: rgba(22,40,64,0.55); }   /* fond --card2 sur jours impairs */
+    .hour-table td.day-sep { border-left: 2px solid rgba(79,195,247,0.45) !important; }  /* trait accent entre jours */
     .rain-trace td { background: rgba(33,150,243,0.07); }
     .rain-light td { background: rgba(33,150,243,0.16); }
     .rain-med   td { background: rgba(33,150,243,0.28); }
@@ -357,7 +361,7 @@
         <div class="week-row week-fill" id="week-wrap"><div class="loading">Chargement…</div></div>
       </div>
       <div class="meteo-section">
-        <div class="section-lbl">🕐 Heure par heure — 48 h</div>
+        <div class="section-lbl">🕐 Heure par heure — 7 jours</div>
         <div id="meteo-wrap"><div class="loading">Chargement…</div></div>
       </div>
     </div>
@@ -576,7 +580,7 @@ async function fetchMeteo() {
   const hourlyP = new URLSearchParams({
     latitude: loc.lat, longitude: loc.lon,
     hourly: 'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover',
-    timezone: 'Europe/Paris', forecast_days: 2,
+    timezone: 'Europe/Paris', forecast_days: 7,
   });
   const dailyP = new URLSearchParams({
     latitude: loc.lat, longitude: loc.lon,
@@ -608,7 +612,8 @@ function renderMeteoSemaine(d) {
     const [icon]  = wmo(d.weather_code[i]);
     const rain    = d.precipitation_sum[i] ?? 0;
     const prob    = d.precipitation_probability_max[i] ?? 0;
-    html += `<div class="day-card${isToday ? ' today' : ''}">
+    const isoDate = d.time[i].split('T')[0];
+    html += `<div class="day-card${isToday ? ' today' : ''}" data-date="${isoDate}" onclick="scrollHoraireToDay('${isoDate}',this)">
       <div class="day-name">${dayName} ${dayNum}</div>
       <div class="day-icon">${icon}</div>
       <div class="day-temps">
@@ -624,10 +629,10 @@ function renderMeteoSemaine(d) {
 function renderMeteoHeure(h) {
   const now = Date.now();
 
-  // Collect indices for next 48h
+  // Collect indices : de l'heure actuelle jusqu'à la fin des données (7 jours)
   const idx = [];
   for (let i = 0; i < h.time.length; i++) {
-    if (new Date(h.time[i]).getTime() >= now - 3_600_000 && idx.length < 48) idx.push(i);
+    if (new Date(h.time[i]).getTime() >= now - 3_600_000) idx.push(i);
   }
 
   // Compute day groups for header colspan
@@ -635,8 +640,28 @@ function renderMeteoHeure(h) {
   let lastDay = '';
   for (const i of idx) {
     const day = fmtDayShort(h.time[i]);
-    if (day !== lastDay) { groups.push({ label: fmtDay(h.time[i]), count: 1 }); lastDay = day; }
+    if (day !== lastDay) { groups.push({ label: fmtDay(h.time[i]), count: 1, isoDate: h.time[i].split('T')[0] }); lastDay = day; }
     else groups[groups.length - 1].count++;
+  }
+
+  // Pré-calcul : groupe de jour (0=J0, 1=J1…) et premier i du groupe (pour la séparation)
+  const dayGroupMap = new Map(); // i → group index
+  const daySepSet   = new Set(); // i values that open a new day (except first)
+  let grpIdx = 0, lastDayKey = '';
+  for (const i of idx) {
+    const dk = h.time[i].split('T')[0];
+    if (dk !== lastDayKey) {
+      if (lastDayKey !== '') { grpIdx++; daySepSet.add(i); }
+      lastDayKey = dk;
+    }
+    dayGroupMap.set(i, grpIdx);
+  }
+  // Helper : retourne l'attribut class complet pour une cellule
+  function tdCls(i, extra = '') {
+    const grp = dayGroupMap.get(i) || 0;
+    const cls = [extra, grp % 2 === 1 ? 'g-alt' : '', daySepSet.has(i) ? 'day-sep' : '']
+      .filter(Boolean).join(' ');
+    return cls ? ` class="${cls}"` : '';
   }
 
   // Colonne labels (hors zone scrollable)
@@ -650,22 +675,26 @@ function renderMeteoHeure(h) {
 
   // Day header row
   tbl += '<tr>';
-  for (const g of groups) tbl += `<td colspan="${g.count}" class="h-day">${g.label}</td>`;
+  for (let gi = 0; gi < groups.length; gi++) {
+    const g = groups[gi];
+    const sep = gi > 0 ? ' day-sep' : '';
+    tbl += `<td colspan="${g.count}" class="h-day${sep}" data-date="${g.isoDate}">${g.label}</td>`;
+  }
   tbl += '</tr>';
 
   // Hour row
   tbl += '<tr>';
-  for (const i of idx) tbl += `<td class="h-hour">${fmtHHMM(h.time[i])}</td>`;
+  for (const i of idx) tbl += `<td${tdCls(i,'h-hour')}>${fmtHHMM(h.time[i])}</td>`;
   tbl += '</tr>';
 
   // Ciel
   tbl += '<tr>';
-  for (const i of idx) { const [icon] = wmo(h.weather_code[i]); tbl += `<td title="${wmo(h.weather_code[i])[1]}">${icon}</td>`; }
+  for (const i of idx) { const [icon] = wmo(h.weather_code[i]); tbl += `<td${tdCls(i)} title="${wmo(h.weather_code[i])[1]}">${icon}</td>`; }
   tbl += '</tr>';
 
   // Température
   tbl += '<tr>';
-  for (const i of idx) tbl += `<td><strong>${ri(h.temperature_2m[i])}°</strong></td>`;
+  for (const i of idx) tbl += `<td${tdCls(i)}><strong>${ri(h.temperature_2m[i])}°</strong></td>`;
   tbl += '</tr>';
 
   // Probabilité pluie
@@ -673,7 +702,7 @@ function renderMeteoHeure(h) {
   for (const i of idx) {
     const p = h.precipitation_probability[i] ?? 0;
     const c = p > 70 ? 'var(--accent)' : p > 40 ? '#90caf9' : 'var(--muted)';
-    tbl += `<td style="color:${c}">${p}%</td>`;
+    tbl += `<td${tdCls(i)} style="color:${c}">${p}%</td>`;
   }
   tbl += '</tr>';
 
@@ -685,7 +714,7 @@ function renderMeteoHeure(h) {
     if (rain >= 3) bg = 'background:rgba(33,150,243,0.40)';
     else if (rain >= 1) bg = 'background:rgba(33,150,243,0.25)';
     else if (rain > 0) bg = 'background:rgba(33,150,243,0.12)';
-    tbl += `<td style="${bg}">${rain > 0 ? r(rain) + 'mm' : '—'}</td>`;
+    tbl += `<td${tdCls(i)} style="${bg}">${rain > 0 ? r(rain) + 'mm' : '—'}</td>`;
   }
   tbl += '</tr>';
 
@@ -694,7 +723,7 @@ function renderMeteoHeure(h) {
   for (const i of idx) {
     const c = h.cloud_cover[i] ?? 0;
     const col = c > 80 ? 'var(--muted)' : c > 40 ? '#90caf9' : 'inherit';
-    tbl += `<td style="color:${col}">${c}%</td>`;
+    tbl += `<td${tdCls(i)} style="color:${col}">${c}%</td>`;
   }
   tbl += '</tr>';
 
@@ -1020,6 +1049,24 @@ function renderWaves(m, w) {
   document.getElementById('wave-outer').innerHTML =
     `<div class="hour-outer">${lblHtml}<div class="hour-scroll">${tbl}</div></div>`;
   syncTableLabels('wave-outer');
+}
+
+/* Scroll le tableau météo horaire jusqu'au début du jour cliqué */
+function scrollHoraireToDay(isoDate, card) {
+  // Mise en évidence de la carte cliquée
+  document.querySelectorAll('#week-wrap .day-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+
+  // Scroll du tableau vers la colonne du jour
+  const scroll = document.querySelector('#meteo-wrap .hour-scroll');
+  if (!scroll) return;
+  const cell = scroll.querySelector(`td[data-date="${isoDate}"]`);
+  if (!cell) return;
+  scroll.scrollTo({ left: cell.offsetLeft, behavior: 'smooth' });
+
+  // Scroll la page vers le tableau horaire
+  const wrap = document.getElementById('meteo-wrap');
+  if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 /* Synchronise la hauteur des lignes labels avec les lignes du tableau */

@@ -443,8 +443,10 @@
   <div class="card">
     <div class="card-head">
       <h2>📷 Webcams</h2>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="toggleWebcamFullscreen()"
+        title="Plein écran (bascule en paysage sur mobile)">⛶ Plein écran</button>
       <a id="webcam-ext" href="https://www.skaping.com/pleneuf-val-andre/casino/live" target="_blank"
-         style="font-size:10px;color:var(--accent);margin-left:auto">Plein écran ↗</a>
+         style="font-size:10px;color:var(--accent)">Ouvrir ↗</a>
     </div>
     <div class="card-body" style="padding:0;display:flex;flex-direction:column">
       <iframe id="webcam-frame"
@@ -684,7 +686,7 @@ function renderMeteoHeure(h) {
 
   // Hour row
   tbl += '<tr>';
-  for (const i of idx) tbl += `<td${tdCls(i,'h-hour')}>${fmtHHMM(h.time[i])}</td>`;
+  for (const i of idx) tbl += `<td${tdCls(i,'h-hour')} data-dt="${h.time[i]}">${fmtHHMM(h.time[i])}</td>`;
   tbl += '</tr>';
 
   // Ciel
@@ -747,6 +749,41 @@ function setWebcam(key) {
   document.getElementById('webcam-ext').href  = cam.src;
 }
 
+/* Plein écran de la webcam : bascule en paysage sur mobile (Screen Orientation API),
+   et rend l'orientation libre à la sortie. Fonctionne aussi si le plein écran est
+   lancé depuis le lecteur Skaping dans l'iframe. */
+let _webcamOrientationLocked = false;
+const _fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+
+function toggleWebcamFullscreen() {
+  const frame = document.getElementById('webcam-frame');
+  if (_fsElement()) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    return;
+  }
+  const req = frame.requestFullscreen || frame.webkitRequestFullscreen;
+  if (!req) { window.open(document.getElementById('webcam-ext').href, '_blank'); return; } // ex. iPhone
+  Promise.resolve(req.call(frame)).catch(() => {
+    window.open(document.getElementById('webcam-ext').href, '_blank');
+  });
+}
+
+function _onFullscreenChange() {
+  const el = _fsElement();
+  if (el && el.id === 'webcam-frame') {
+    if (screen.orientation && screen.orientation.lock) {
+      screen.orientation.lock('landscape')
+        .then(() => { _webcamOrientationLocked = true; })
+        .catch(() => {}); // non supporté (iOS, desktop) : on ignore
+    }
+  } else if (!el && _webcamOrientationLocked) {
+    _webcamOrientationLocked = false;
+    try { screen.orientation.unlock(); } catch (e) {}
+  }
+}
+document.addEventListener('fullscreenchange', _onFullscreenChange);
+document.addEventListener('webkitfullscreenchange', _onFullscreenChange);
+
 /* ================================================================
    RADAR — Windy embed
    ================================================================ */
@@ -790,8 +827,15 @@ function toggleWindyLock() {
    MARÉES DAHOUET — api-maree.fr (données SHOM officielles)
    Inscription gratuite : https://api-maree.fr/register
    ================================================================ */
-const AM_CORR_MIN = -6; // correction ecart systématique api-maree.fr → maree.info
+// Correction (en minutes) appliquée aux horaires api-maree.fr pour coller à maree.info.
+// Pour calibrer : ouvrir la page avec ?corr=0 (horaires bruts de l'API), ?corr=-3, etc.
+const AM_CORR_MIN = Number(new URLSearchParams(location.search).get('corr') ?? -6);
 const AM_API_KEY  = 'e3b34ffef47b5e4da34f5f7db292b521';
+
+/* Date du jour (AAAA-MM-JJ) à l'heure de Paris */
+function parisISO(d = new Date()) {
+  return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' });
+}
 
 function addMins(timeHHMM, mins) {
   const [h, m] = timeHHMM.split(':').map(Number);
@@ -804,10 +848,12 @@ async function fetchTidesAM() {
   wrap.innerHTML = '<div class="loading">Chargement…</div>';
 
   try {
-    const today = new Date();
-    const from  = today.toISOString().slice(0, 10);
-    const to    = new Date(today.getTime() + 6 * 86_400_000).toISOString().slice(0, 10);
-    const url   = `https://api-maree.fr/tide-extrema?site=dahouet&from=${from}&to=${to}&tz=Europe/Paris&key=${AM_API_KEY}`;
+    // Dates calées sur Paris (toISOString() donnait la date UTC : décalée d'un jour entre minuit et 1h/2h)
+    const from = parisISO();
+    const end  = new Date(from + 'T12:00:00Z');
+    end.setUTCDate(end.getUTCDate() + 6);
+    const to   = end.toISOString().slice(0, 10);
+    const url  = `https://api-maree.fr/tide-extrema?site=dahouet&from=${from}&to=${to}&tz=Europe/Paris&key=${AM_API_KEY}`;
 
     const res  = await fetch(url);
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -821,7 +867,7 @@ async function fetchTidesAM() {
 }
 
 function renderTideWeekAM(days) {
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = parisISO();
   let html = '';
   for (const day of days) {
     const date    = new Date(day.date + 'T12:00:00');
@@ -836,7 +882,7 @@ function renderTideWeekAM(days) {
       </div>`;
     }
     if (!inner) inner = '<div class="tide-mini" style="color:var(--muted)">—</div>';
-    html += `<div class="day-card${isToday ? ' today' : ''}" style="min-width:92px;text-align:left">
+    html += `<div class="day-card${isToday ? ' today' : ''}" data-date="${day.date}" style="min-width:92px;text-align:left" onclick="scrollWavesToDay('${day.date}',this)">
       <div class="day-name" style="margin-bottom:3px">${label}&nbsp;${date.getDate()}</div>
       ${inner}
     </div>`;
@@ -862,7 +908,7 @@ async function fetchWaves() {
       'wind_wave_height','wind_wave_period',
     ].join(','),
     timezone:      'Europe/Paris',
-    forecast_days: 5,
+    forecast_days: 7,
   });
 
   const windP = new URLSearchParams({
@@ -918,15 +964,15 @@ function renderWaves(m, w) {
 
   const now = new Date();
 
-  /* — Chart (every hour, 5 days) — */
+  /* — Chart (every hour, 7 days) — */
   const chartLbls = [], chartHs = [], chartSwell = [];
   for (let i = 0; i < m.time.length; i++) {
     const t = new Date(m.time[i]);
     if (t < now) continue;
-    // Label toutes les 6h pour lisibilité, sinon chaîne vide
-    const lbl = t.getHours() % 6 === 0
-      ? t.toLocaleString('fr-FR', { weekday: 'short', hour: '2-digit' })
-      : '';
+    // Étiquettes compactes : jour à minuit, "12h" à midi, rien sinon (affichées via ticks.callback)
+    const lbl = t.getHours() === 0 ? t.toLocaleDateString('fr-FR', { weekday: 'short' })
+              : t.getHours() === 12 ? '12h'
+              : '';
     chartLbls.push(lbl);
     chartHs.push(m.wave_height[i]?.toFixed(2) ?? 0);
     chartSwell.push(m.swell_wave_height[i]?.toFixed(2) ?? 0);
@@ -964,13 +1010,15 @@ function renderWaves(m, w) {
         legend: { labels: { color: '#8ab4c8', boxWidth: 12, font: { size: 10 } } }
       },
       scales: {
-        x: { ticks: { color: '#5a8099', maxTicksLimit: 12, maxRotation: 0 }, grid: { color: 'rgba(30,58,95,0.4)' } },
+        x: { ticks: { color: '#5a8099', autoSkip: false, maxRotation: 0,
+                      callback(value) { return this.getLabelForValue(value); } },
+             grid: { color: 'rgba(30,58,95,0.4)' } },
         y: { min: 0, ticks: { color: '#5a8099', callback: v => v + ' m' }, grid: { color: 'rgba(30,58,95,0.6)' } }
       }
     }
   });
 
-  /* — Tableau horizontal (toutes les heures, 5 jours) — */
+  /* — Tableau horizontal (toutes les heures, 7 jours) — */
   const idx = [];
   for (let i = 0; i < m.time.length; i++) {
     const t = new Date(m.time[i]);
@@ -983,7 +1031,7 @@ function renderWaves(m, w) {
   let lastDay = '';
   for (const i of idx) {
     const day = fmtDayShort(m.time[i]);
-    if (day !== lastDay) { groups.push({ label: fmtDay(m.time[i]), count: 1 }); lastDay = day; }
+    if (day !== lastDay) { groups.push({ label: fmtDay(m.time[i]), count: 1, isoDate: m.time[i].split('T')[0] }); lastDay = day; }
     else groups[groups.length - 1].count++;
   }
 
@@ -998,12 +1046,12 @@ function renderWaves(m, w) {
 
   // En-tête jours
   tbl += '<tr>';
-  for (const g of groups) tbl += `<td colspan="${g.count}" class="h-day">${g.label}</td>`;
+  for (const g of groups) tbl += `<td colspan="${g.count}" class="h-day" data-date="${g.isoDate}">${g.label}</td>`;
   tbl += '</tr>';
 
   // Heure
   tbl += '<tr>';
-  for (const i of idx) tbl += `<td class="h-hour">${fmtHHMM(m.time[i])}</td>`;
+  for (const i of idx) tbl += `<td class="h-hour" data-dt="${m.time[i]}">${fmtHHMM(m.time[i])}</td>`;
   tbl += '</tr>';
 
   // Hs total
@@ -1051,22 +1099,37 @@ function renderWaves(m, w) {
   syncTableLabels('wave-outer');
 }
 
-/* Scroll le tableau météo horaire jusqu'au début du jour cliqué */
-function scrollHoraireToDay(isoDate, card) {
-  // Mise en évidence de la carte cliquée
-  document.querySelectorAll('#week-wrap .day-card').forEach(c => c.classList.remove('selected'));
-  if (card) card.classList.add('selected');
+/* Heure sur laquelle un tableau horaire se cale quand on clique sur un jour */
+const SCROLL_HOUR = 6;
 
-  // Scroll du tableau vers la colonne du jour
-  const scroll = document.querySelector('#meteo-wrap .hour-scroll');
+/* Fait défiler un tableau horaire (dans #wrapId) jusqu'à SCROLL_HOUR h du jour donné.
+   Si cette heure n'existe pas (ex. aujourd'hui, déjà passée), on se cale sur le début du jour. */
+function scrollTableToDay(wrapId, isoDate) {
+  const scroll = document.querySelector(`#${wrapId} .hour-scroll`);
   if (!scroll) return;
-  const cell = scroll.querySelector(`td[data-date="${isoDate}"]`);
+  const hh   = String(SCROLL_HOUR).padStart(2, '0');
+  const cell = scroll.querySelector(`td[data-dt="${isoDate}T${hh}:00"]`)
+            || scroll.querySelector(`td[data-date="${isoDate}"]`);
   if (!cell) return;
   scroll.scrollTo({ left: cell.offsetLeft, behavior: 'smooth' });
 
-  // Scroll la page vers le tableau horaire
-  const wrap = document.getElementById('meteo-wrap');
+  // Amène le tableau dans la fenêtre si besoin
+  const wrap = document.getElementById(wrapId);
   if (wrap) wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+/* Clic sur un jour des prévisions de la semaine → météo heure par heure */
+function scrollHoraireToDay(isoDate, card) {
+  document.querySelectorAll('#week-wrap .day-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+  scrollTableToDay('meteo-wrap', isoDate);
+}
+
+/* Clic sur un jour des marées → tableau vent / vagues */
+function scrollWavesToDay(isoDate, card) {
+  document.querySelectorAll('#tide-week-row .day-card').forEach(c => c.classList.remove('selected'));
+  if (card) card.classList.add('selected');
+  scrollTableToDay('wave-outer', isoDate);
 }
 
 /* Synchronise la hauteur des lignes labels avec les lignes du tableau */

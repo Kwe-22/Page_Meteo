@@ -522,9 +522,15 @@ const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" style="vert
   + '<path d="M7 18h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.1 9.1 4.5 4.5 0 0 0 7 18z" '
   + 'fill="#cfd8dc" stroke="#90a4ae" stroke-width="1.2" stroke-linejoin="round"/></svg>';
 
+// Brouillard : nuage + traits, en SVG à fond transparent (l'emoji 🌫️ s'affiche avec un fond sur certains navigateurs)
+const FOG_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" style="vertical-align:-0.15em" aria-hidden="true">'
+  + '<path d="M7 13h10a3.5 3.5 0 0 0 .5-6.96A5 5 0 0 0 7.2 5.3 4 4 0 0 0 7 13z" '
+  + 'fill="#cfd8dc" stroke="#90a4ae" stroke-width="1.2" stroke-linejoin="round"/>'
+  + '<path d="M4 16.5h16M6 19.5h12M8.5 22.5h7" stroke="#90a4ae" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg>';
+
 const WMO = {
   0:['☀️','Dégagé'], 1:['🌤️','Peu nuageux'], 2:['⛅','Nuageux'], 3:[CLOUD_SVG,'Couvert'],
-  45:['🌫️','Brouillard'], 48:['🌫️','Brouillard givrant'],
+  45:[FOG_SVG,'Brouillard'], 48:[FOG_SVG,'Brouillard givrant'],
   51:['🌦️','Bruine légère'], 53:['🌦️','Bruine'], 55:['🌧️','Bruine forte'],
   61:['🌧️','Pluie légère'], 63:['🌧️','Pluie'], 65:['🌧️','Pluie forte'],
   71:['❄️','Neige légère'], 73:['❄️','Neige'], 75:['❄️','Neige forte'],
@@ -620,9 +626,7 @@ function renderMeteoSemaine(d) {
     const isoDate = d.time[i].split('T')[0];
     html += `<div class="day-card${isToday ? ' today' : ''}" data-date="${isoDate}" onclick="scrollHoraireToDay('${isoDate}',this)">
       <div class="day-name">${dayName} ${dayNum}</div>
-      <div class="day-icon" title="${wmo(d.weather_code[i])[1]} (code ${d.weather_code[i]})">${icon}</div>
-      <div class="day-desc" style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px">${wmo(d.weather_code[i])[1]}<br>(code ${d.weather_code[i]})</div>
-      <div class="day-temps">
+      <div class="day-icon" title="${wmo(d.weather_code[i])[1]} (code ${d.weather_code[i]})">${icon}</div>      <div class="day-temps">
         <span class="day-max">${ri(d.temperature_2m_max[i])}°</span>
         <span class="day-min">${ri(d.temperature_2m_min[i])}°</span>
       </div>

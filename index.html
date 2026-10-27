@@ -517,8 +517,13 @@ async function searchMeteoCommune() {
 /* ================================================================
    WMO CODES
    ================================================================ */
+// Nuage dessiné en SVG (fond transparent) : l'emoji ☁️ s'affiche avec un fond carré blanc sur certains navigateurs
+const CLOUD_SVG = '<svg viewBox="0 0 24 24" width="1em" height="1em" style="vertical-align:-0.15em" aria-hidden="true">'
+  + '<path d="M7 18h10a4 4 0 0 0 .6-7.95A5.5 5.5 0 0 0 7.1 9.1 4.5 4.5 0 0 0 7 18z" '
+  + 'fill="#cfd8dc" stroke="#90a4ae" stroke-width="1.2" stroke-linejoin="round"/></svg>';
+
 const WMO = {
-  0:['☀️','Dégagé'], 1:['🌤️','Peu nuageux'], 2:['⛅','Nuageux'], 3:['☁️','Couvert'],
+  0:['☀️','Dégagé'], 1:['🌤️','Peu nuageux'], 2:['⛅','Nuageux'], 3:[CLOUD_SVG,'Couvert'],
   45:['🌫️','Brouillard'], 48:['🌫️','Brouillard givrant'],
   51:['🌦️','Bruine légère'], 53:['🌦️','Bruine'], 55:['🌧️','Bruine forte'],
   61:['🌧️','Pluie légère'], 63:['🌧️','Pluie'], 65:['🌧️','Pluie forte'],

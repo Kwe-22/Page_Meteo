@@ -621,6 +621,7 @@ function renderMeteoSemaine(d) {
     html += `<div class="day-card${isToday ? ' today' : ''}" data-date="${isoDate}" onclick="scrollHoraireToDay('${isoDate}',this)">
       <div class="day-name">${dayName} ${dayNum}</div>
       <div class="day-icon" title="${wmo(d.weather_code[i])[1]} (code ${d.weather_code[i]})">${icon}</div>
+      <div class="day-desc" style="font-size:9px;color:var(--muted);line-height:1.2;margin-bottom:3px">${wmo(d.weather_code[i])[1]}<br>(code ${d.weather_code[i]})</div>
       <div class="day-temps">
         <span class="day-max">${ri(d.temperature_2m_max[i])}°</span>
         <span class="day-min">${ri(d.temperature_2m_min[i])}°</span>

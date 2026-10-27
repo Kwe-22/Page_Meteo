@@ -620,7 +620,7 @@ function renderMeteoSemaine(d) {
     const isoDate = d.time[i].split('T')[0];
     html += `<div class="day-card${isToday ? ' today' : ''}" data-date="${isoDate}" onclick="scrollHoraireToDay('${isoDate}',this)">
       <div class="day-name">${dayName} ${dayNum}</div>
-      <div class="day-icon">${icon}</div>
+      <div class="day-icon" title="${wmo(d.weather_code[i])[1]} (code ${d.weather_code[i]})">${icon}</div>
       <div class="day-temps">
         <span class="day-max">${ri(d.temperature_2m_max[i])}°</span>
         <span class="day-min">${ri(d.temperature_2m_min[i])}°</span>

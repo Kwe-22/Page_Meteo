@@ -443,10 +443,8 @@
   <div class="card">
     <div class="card-head">
       <h2>📷 Webcams</h2>
-      <button class="btn btn-sm" style="margin-left:auto" onclick="toggleWebcamFullscreen()"
-        title="Plein écran (bascule en paysage sur mobile)">⛶ Plein écran</button>
       <a id="webcam-ext" href="https://www.skaping.com/pleneuf-val-andre/casino/live" target="_blank"
-         style="font-size:10px;color:var(--accent)">Ouvrir ↗</a>
+         style="font-size:10px;color:var(--accent);margin-left:auto">Ouvrir ↗</a>
     </div>
     <div class="card-body" style="padding:0;display:flex;flex-direction:column">
       <iframe id="webcam-frame"
@@ -749,24 +747,10 @@ function setWebcam(key) {
   document.getElementById('webcam-ext').href  = cam.src;
 }
 
-/* Plein écran de la webcam : bascule en paysage sur mobile (Screen Orientation API),
-   et rend l'orientation libre à la sortie. Fonctionne aussi si le plein écran est
-   lancé depuis le lecteur Skaping dans l'iframe. */
+/* Plein écran lancé depuis le lecteur Skaping (dans l'iframe) : bascule en paysage
+   sur mobile (Screen Orientation API), et rend l'orientation libre à la sortie. */
 let _webcamOrientationLocked = false;
 const _fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
-
-function toggleWebcamFullscreen() {
-  const frame = document.getElementById('webcam-frame');
-  if (_fsElement()) {
-    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
-    return;
-  }
-  const req = frame.requestFullscreen || frame.webkitRequestFullscreen;
-  if (!req) { window.open(document.getElementById('webcam-ext').href, '_blank'); return; } // ex. iPhone
-  Promise.resolve(req.call(frame)).catch(() => {
-    window.open(document.getElementById('webcam-ext').href, '_blank');
-  });
-}
 
 function _onFullscreenChange() {
   const el = _fsElement();

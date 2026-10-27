@@ -821,9 +821,9 @@ function toggleWindyLock() {
    MARÉES DAHOUET — api-maree.fr (données SHOM officielles)
    Inscription gratuite : https://api-maree.fr/register
    ================================================================ */
-// Correction (en minutes) appliquée aux horaires api-maree.fr pour coller à maree.info.
-// Pour calibrer : ouvrir la page avec ?corr=0 (horaires bruts de l'API), ?corr=-3, etc.
-const AM_CORR_MIN = Number(new URLSearchParams(location.search).get('corr') ?? -6);
+// Aucune correction par défaut : les horaires sont ceux de l'API tels quels.
+// Pour tester une correction (en minutes) sans modifier le code : ajouter ?corr=-3 à l'adresse.
+const AM_CORR_MIN = Number(new URLSearchParams(location.search).get('corr') ?? 0);
 const AM_API_KEY  = 'e3b34ffef47b5e4da34f5f7db292b521';
 
 /* Date du jour (AAAA-MM-JJ) à l'heure de Paris */

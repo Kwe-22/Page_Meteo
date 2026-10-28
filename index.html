@@ -427,6 +427,7 @@
       <div class="meteo-section">
         <div class="section-lbl">📅 Prévisions 7 jours — PM / BM</div>
         <div class="week-row" id="tide-week-row"><div class="loading">Chargement…</div></div>
+        <div id="tide-source" style="font-size:10px;color:var(--muted);margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--border)"></div>
       <div id="wave-chart-wrap" style="padding:10px 12px 8px">
@@ -567,7 +568,7 @@ function fmtDateHHMM(isoOrTs) {
 function refreshAll() {
   fetchMeteo();
   fetchWaves();
-  fetchTidesAM();
+  fetchTides();
   document.getElementById('last-update').textContent =
     'Actualisé ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
@@ -578,7 +579,7 @@ function refreshAll() {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('last-update').textContent =
     'Chargé à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  Promise.allSettled([fetchMeteo(), fetchWaves(), fetchTidesAM()]);
+  Promise.allSettled([fetchMeteo(), fetchWaves(), fetchTides()]);
   // Auto-refresh toutes les 30 min
   setTimeout(() => location.reload(), 30 * 60 * 1000);
 });
@@ -818,8 +819,8 @@ function toggleWindyLock() {
 }
 
 /* ================================================================
-   MARÉES DAHOUET — api-maree.fr (données SHOM officielles)
-   Inscription gratuite : https://api-maree.fr/register
+   MARÉES DAHOUET — marees.json (SHOM), secours : api-maree.fr
+   api-maree.fr : inscription gratuite https://api-maree.fr/register
    ================================================================ */
 // Aucune correction par défaut : les horaires sont ceux de l'API tels quels.
 // Pour tester une correction (en minutes) sans modifier le code : ajouter ?corr=-3 à l'adresse.
@@ -837,9 +838,47 @@ function addMins(timeHHMM, mins) {
   return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
 }
 
+/* ── Source principale : marees.json, mis à jour chaque jour par le robot GitHub
+      (tools/fetch-marees.mjs) à partir de maree.shom.fr. ── */
+const TIDES_MAX_AGE_H = 72;   // au-delà, on considère le fichier périmé
+
+function setTideSource(html) {
+  const el = document.getElementById('tide-source');
+  if (el) el.innerHTML = html;
+}
+
+async function loadTidesShom() {
+  const res = await fetch('marees.json?' + Date.now(), { cache: 'no-store' });
+  if (!res.ok) throw new Error('marees.json HTTP ' + res.status);
+  const data = await res.json();
+  const ageH = (Date.now() - new Date(data.updated).getTime()) / 3_600_000;
+  if (!(ageH < TIDES_MAX_AGE_H)) throw new Error('marees.json trop ancien');
+  const today = parisISO();
+  const days  = (data.days || []).filter(d => d.date >= today);
+  if (!days.length || days[0].date !== today) throw new Error("aujourd'hui absent de marees.json");
+  return { days, updated: data.updated };
+}
+
+async function fetchTides() {
+  const wrap = document.getElementById('tide-week-row');
+  wrap.innerHTML = '<div class="loading">Chargement…</div>';
+  try {
+    const { days, updated } = await loadTidesShom();
+    renderTideWeekAM(days, 0);
+    const maj = new Date(updated).toLocaleString('fr-FR', {
+      timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    setTideSource(`Source : SHOM (maree.shom.fr) · mis à jour le ${maj}`);
+  } catch (e) {
+    console.warn('Marées SHOM indisponibles, bascule sur api-maree.fr :', e.message);
+    await fetchTidesAM();
+  }
+}
+
+/* ── Source de secours : api-maree.fr (horaires indicatifs, écart possible avec le SHOM) ── */
 async function fetchTidesAM() {
   const wrap = document.getElementById('tide-week-row');
   wrap.innerHTML = '<div class="loading">Chargement…</div>';
+  setTideSource('');
 
   try {
     // Dates calées sur Paris (toISOString() donnait la date UTC : décalée d'un jour entre minuit et 1h/2h)
@@ -854,13 +893,14 @@ async function fetchTidesAM() {
     const data = await res.json();
     if (!data.data || !Array.isArray(data.data)) throw new Error('Réponse invalide');
 
-    renderTideWeekAM(data.data);
+    renderTideWeekAM(data.data, AM_CORR_MIN);
+    setTideSource('⚠ Horaires indicatifs (api-maree.fr, écart possible de ±10 min avec le SHOM) — données SHOM indisponibles');
   } catch (e) {
     wrap.innerHTML = `<div class="error">Erreur marées : ${e.message}</div>`;
   }
 }
 
-function renderTideWeekAM(days) {
+function renderTideWeekAM(days, corrMin = 0) {
   const todayStr = parisISO();
   let html = '';
   for (const day of days) {
@@ -872,7 +912,7 @@ function renderTideWeekAM(days) {
       const isPM   = e.type === 'PM';
       const coef   = isPM && e.coef ? ` <span style="color:var(--muted);font-size:9px">(${e.coef})</span>` : '';
       inner += `<div class="tide-mini ${isPM ? 'tide-pm' : 'tide-bm'}">
-        ${isPM ? '⬆' : '⬇'}&nbsp;${addMins(e.time, AM_CORR_MIN)}&nbsp;<b>${r(e.height, 2)}m</b>${coef}
+        ${isPM ? '⬆' : '⬇'}&nbsp;${addMins(e.time, corrMin)}&nbsp;<b>${r(e.height, 2)}m</b>${coef}
       </div>`;
     }
     if (!inner) inner = '<div class="tide-mini" style="color:var(--muted)">—</div>';

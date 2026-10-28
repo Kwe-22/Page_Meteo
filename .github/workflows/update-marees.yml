@@ -1,0 +1,55 @@
+name: Mise à jour des marées (SHOM)
+
+# Lit chaque jour les marées de Dahouet sur maree.shom.fr et met à jour marees.json.
+# Les lancements automatiques (schedule) ne tournent que depuis la branche par défaut (main).
+on:
+  schedule:
+    - cron: '0 4 * * *'      # 04h00 UTC = 05h ou 06h à Paris
+  workflow_dispatch:         # bouton « Run workflow » dans l'onglet Actions
+  push:
+    branches: [main]
+    paths:
+      - tools/**
+      - .github/workflows/update-marees.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-marees
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Installer Playwright (navigateur sans écran)
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+      - name: Lire les marées de Dahouet sur maree.shom.fr
+        env:
+          TZ: Europe/Paris
+        run: node tools/fetch-marees.mjs
+      - name: Enregistrer marees.json
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Repartir de la dernière version de la branche (utile si le lancement est rejoué
+          # depuis un ancien commit), puis y remettre le fichier qui vient d'être produit.
+          cp marees.json "$RUNNER_TEMP/marees.json"
+          git fetch origin "$GITHUB_REF_NAME"
+          git checkout -B "$GITHUB_REF_NAME" "origin/$GITHUB_REF_NAME"
+          cp "$RUNNER_TEMP/marees.json" marees.json
+          git add marees.json
+          if git diff --cached --quiet; then
+            echo "Aucun changement"
+          else
+            git commit -m "Marées : mise à jour automatique (SHOM)"
+            git push origin "$GITHUB_REF_NAME"
+          fi

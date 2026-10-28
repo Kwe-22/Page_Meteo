@@ -1,0 +1,204 @@
+{
+  "source": "maree.shom.fr",
+  "port": "Dahouet",
+  "updated": "2026-10-28T06:54:52.756Z",
+  "days": [
+    {
+      "date": "2026-10-28",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "02:22",
+          "height": 1.32,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "07:58",
+          "height": 11.71,
+          "coef": 99
+        },
+        {
+          "type": "BM",
+          "time": "14:42",
+          "height": 1.36,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "20:21",
+          "height": 11.55,
+          "coef": 96
+        }
+      ]
+    },
+    {
+      "date": "2026-10-29",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "03:01",
+          "height": 1.54,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "08:37",
+          "height": 11.5,
+          "coef": 93
+        },
+        {
+          "type": "BM",
+          "time": "15:21",
+          "height": 1.63,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "21:02",
+          "height": 11.13,
+          "coef": 88
+        }
+      ]
+    },
+    {
+      "date": "2026-10-30",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "03:40",
+          "height": 1.99,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "09:17",
+          "height": 11.03,
+          "coef": 82
+        },
+        {
+          "type": "BM",
+          "time": "16:03",
+          "height": 2.13,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "21:45",
+          "height": 10.46,
+          "coef": 76
+        }
+      ]
+    },
+    {
+      "date": "2026-10-31",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "04:22",
+          "height": 2.65,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "10:01",
+          "height": 10.35,
+          "coef": 69
+        },
+        {
+          "type": "BM",
+          "time": "16:49",
+          "height": 2.8,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "22:35",
+          "height": 9.66,
+          "coef": 62
+        }
+      ]
+    },
+    {
+      "date": "2026-11-01",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "05:12",
+          "height": 3.39,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "10:56",
+          "height": 9.59,
+          "coef": 56
+        },
+        {
+          "type": "BM",
+          "time": "17:47",
+          "height": 3.49,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "23:40",
+          "height": 8.91,
+          "coef": 51
+        }
+      ]
+    },
+    {
+      "date": "2026-11-02",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "06:17",
+          "height": 4.02,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "12:10",
+          "height": 9,
+          "coef": 47
+        },
+        {
+          "type": "BM",
+          "time": "19:06",
+          "height": 3.91,
+          "coef": null
+        }
+      ]
+    },
+    {
+      "date": "2026-11-03",
+      "extrema": [
+        {
+          "type": "PM",
+          "time": "01:11",
+          "height": 8.56,
+          "coef": 47
+        },
+        {
+          "type": "BM",
+          "time": "07:45",
+          "height": 4.22,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "13:44",
+          "height": 8.89,
+          "coef": 48
+        },
+        {
+          "type": "BM",
+          "time": "20:36",
+          "height": 3.81,
+          "coef": null
+        }
+      ]
+    }
+  ]
+}

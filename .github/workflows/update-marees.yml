@@ -7,7 +7,7 @@ on:
     - cron: '0 4 * * *'      # 04h00 UTC = 05h ou 06h à Paris
   workflow_dispatch:         # bouton « Run workflow » dans l'onglet Actions
   push:
-    branches: [fix/meteo-marees-webcam]
+    branches: [main]
     paths:
       - tools/**
       - .github/workflows/update-marees.yml

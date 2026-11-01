@@ -159,6 +159,16 @@
     .day-min { color: var(--muted); }
     .day-rain { font-size: 10px; color: #90caf9; margin-top: 3px; }
 
+    /* Encart lever / coucher du soleil */
+    .sun-box { display: flex; align-items: center; justify-content: space-around; flex-wrap: wrap; gap: 6px 8px;
+               background: var(--bg); border-radius: 7px; padding: 10px 8px; color: var(--muted); font-size: 12px; }
+    .sun-day  { width: 100%; text-align: center; color: var(--accent); font-weight: 700; font-size: 10px; }
+    .sun-day::first-letter { text-transform: uppercase; }
+    .sun-item { text-align: center; }
+    .sun-ico  { font-size: 22px; line-height: 1.2; }
+    .sun-lbl  { font-size: 10px; color: var(--muted); }
+    .sun-val  { font-size: 16px; font-weight: 700; color: var(--text); }
+
     /* Heure par heure (horizontal) — layout deux colonnes */
     .hour-outer { display: flex; align-items: stretch; }
     .hour-lbl-col {
@@ -359,6 +369,10 @@
       <div class="meteo-section">
         <div class="section-lbl">📅 Prévisions semaine</div>
         <div class="week-row week-fill" id="week-wrap"><div class="loading">Chargement…</div></div>
+      </div>
+      <div class="meteo-section">
+        <div class="section-lbl">🌅 Soleil</div>
+        <div class="sun-box" id="sun-box">Chargement…</div>
       </div>
       <div class="meteo-section">
         <div class="section-lbl">🕐 Heure par heure — 7 jours</div>
@@ -596,7 +610,7 @@ async function fetchMeteo() {
   });
   const dailyP = new URLSearchParams({
     latitude: loc.lat, longitude: loc.lon,
-    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max',
+    daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,sunrise,sunset',
     timezone: 'Europe/Paris', forecast_days: 7,
   });
   try {
@@ -613,10 +627,32 @@ async function fetchMeteo() {
   }
 }
 
+/* Lever / coucher du soleil, par jour (rempli par renderMeteoSemaine) */
+let _sunByDay = {};
+
+function renderSun(isoDate) {
+  const box = document.getElementById('sun-box');
+  if (!box) return;
+  const s = _sunByDay[isoDate];
+  if (!s) { box.textContent = 'Indisponible'; return; }
+  const hm   = iso => iso.slice(11, 16);   // les heures sont déjà à l'heure de Paris
+  const mins = Math.round((new Date(s.sunset) - new Date(s.sunrise)) / 60000);
+  const dur  = `${Math.floor(mins / 60)}h${String(mins % 60).padStart(2, '0')}`;
+  const label = new Date(isoDate + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  box.innerHTML = `<div class="sun-day">${label}</div>
+    <div class="sun-item"><div class="sun-ico">🌅</div><div class="sun-lbl">Lever</div><div class="sun-val">${hm(s.sunrise)}</div></div>
+    <div class="sun-item"><div class="sun-ico">🌇</div><div class="sun-lbl">Coucher</div><div class="sun-val">${hm(s.sunset)}</div></div>
+    <div class="sun-item"><div class="sun-ico">⏱️</div><div class="sun-lbl">Durée du jour</div><div class="sun-val">${dur}</div></div>`;
+}
+
 function renderMeteoSemaine(d) {
   const todayStr = new Date().toLocaleDateString('fr-FR');
   let html = '';
+  _sunByDay = {};
   for (let i = 0; i < d.time.length; i++) {
+    if (d.sunrise && d.sunset && d.sunrise[i] && d.sunset[i]) {
+      _sunByDay[d.time[i].split('T')[0]] = { sunrise: d.sunrise[i], sunset: d.sunset[i] };
+    }
     const date = new Date(d.time[i]);
     const isToday = date.toLocaleDateString('fr-FR') === todayStr;
     const dayName = isToday ? 'Auj.' : date.toLocaleDateString('fr-FR', { weekday: 'short' });
@@ -635,6 +671,7 @@ function renderMeteoSemaine(d) {
     </div>`;
   }
   document.getElementById('week-wrap').innerHTML = html;
+  renderSun(d.time[0].split('T')[0]);   // par défaut : aujourd'hui
 }
 
 function renderMeteoHeure(h) {
@@ -1154,6 +1191,7 @@ function scrollTableToDay(wrapId, isoDate) {
 function scrollHoraireToDay(isoDate, card) {
   document.querySelectorAll('#week-wrap .day-card').forEach(c => c.classList.remove('selected'));
   if (card) card.classList.add('selected');
+  renderSun(isoDate);
   scrollTableToDay('meteo-wrap', isoDate);
 }
 

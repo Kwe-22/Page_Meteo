@@ -600,29 +600,45 @@ window.addEventListener('DOMContentLoaded', () => {
 /* ================================================================
    MÉTÉO (Landéhen / Saint-Aaron)
    ================================================================ */
+/* Récupère un JSON avec de nouvelles tentatives : les API gratuites ont des coups de mou
+   (429 = trop de requêtes, 5xx = serveur en difficulté, ou coupure réseau). */
+async function fetchJSON(url, tries = 3) {
+  let lastErr;
+  for (let k = 0; k < tries; k++) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) return await res.json();
+      lastErr = new Error('HTTP ' + res.status);
+      lastErr.retry = res.status === 429 || res.status >= 500;
+    } catch (e) {
+      lastErr = e;
+      lastErr.retry = true;                       // erreur réseau
+    }
+    if (!lastErr.retry) break;                    // erreur définitive (ex. 400) : inutile de réessayer
+    if (k < tries - 1) await new Promise(r => setTimeout(r, 1500 * (k + 1)));
+  }
+  throw lastErr;
+}
+const RETRY_BTN = '<div style="margin-top:8px"><button class="btn btn-sm" onclick="refreshAll()">↺ Réessayer</button></div>';
+
 async function fetchMeteo() {
   const loc = CFG[currentMeteoLoc];
-  const hourlyP = new URLSearchParams({
+  // Une seule requête (horaire + journalier) au lieu de deux : moins de charge sur l'API
+  const p = new URLSearchParams({
     latitude: loc.lat, longitude: loc.lon,
     hourly: 'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover',
-    timezone: 'Europe/Paris', forecast_days: 7,
-  });
-  const dailyP = new URLSearchParams({
-    latitude: loc.lat, longitude: loc.lon,
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,sunrise,sunset',
     timezone: 'Europe/Paris', forecast_days: 7,
   });
   try {
-    const [hRes, dRes] = await Promise.all([
-      fetch('https://api.open-meteo.com/v1/forecast?' + hourlyP),
-      fetch('https://api.open-meteo.com/v1/forecast?' + dailyP),
-    ]);
-    if (!hRes.ok || !dRes.ok) throw new Error('HTTP error');
-    const [hData, dData] = await Promise.all([hRes.json(), dRes.json()]);
-    renderMeteoSemaine(dData.daily);
-    renderMeteoHeure(hData.hourly);
+    const data = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + p);
+    renderMeteoSemaine(data.daily);
+    renderMeteoHeure(data.hourly);
   } catch (e) {
-    document.getElementById('meteo-wrap').innerHTML = `<div class="error">Erreur météo : ${e.message}</div>`;
+    // On remplit toutes les zones : rien ne doit rester bloqué sur « Chargement… »
+    document.getElementById('week-wrap').innerHTML = `<div class="error" style="flex:1">Météo indisponible (${e.message})</div>`;
+    document.getElementById('sun-box').textContent = 'Indisponible';
+    document.getElementById('meteo-wrap').innerHTML = `<div class="error">Erreur météo : ${e.message}${RETRY_BTN}</div>`;
   }
 }
 
@@ -1001,17 +1017,24 @@ async function fetchWaves() {
     forecast_days:   7,
   });
 
+  // Vagues et vent sont indépendants : si le vent est en panne, on affiche quand même les vagues
+  const [mRes, wRes] = await Promise.allSettled([
+    fetchJSON('https://marine-api.open-meteo.com/v1/marine?' + marineP),
+    fetchJSON('https://api.open-meteo.com/v1/forecast?'      + windP),
+  ]);
+  if (mRes.status === 'rejected') {
+    wrap.innerHTML = `<div class="error">Erreur vagues : ${mRes.reason.message}${RETRY_BTN}</div>`;
+    const cw = document.getElementById('wave-chart-wrap'); if (cw) cw.innerHTML = '';
+    return;
+  }
   try {
-    const [mRes, wRes] = await Promise.all([
-      fetch('https://marine-api.open-meteo.com/v1/marine?' + marineP),
-      fetch('https://api.open-meteo.com/v1/forecast?'      + windP),
-    ]);
-    if (!mRes.ok) throw new Error('Marine HTTP ' + mRes.status);
-    if (!wRes.ok) throw new Error('Wind HTTP '   + wRes.status);
-    const [marine, wind] = await Promise.all([mRes.json(), wRes.json()]);
-    renderWaves(marine.hourly, wind.hourly);
+    renderWaves(mRes.value.hourly, wRes.status === 'fulfilled' ? wRes.value.hourly : null);
+    if (wRes.status === 'rejected') {
+      wrap.insertAdjacentHTML('afterbegin',
+        `<div class="error" style="margin:8px 12px 0">Vent indisponible (${wRes.reason.message}) — les cases « Vent » restent vides.${RETRY_BTN}</div>`);
+    }
   } catch (e) {
-    wrap.innerHTML = `<div class="error">Erreur vagues : ${e.message}</div>`;
+    wrap.innerHTML = `<div class="error">Erreur vagues : ${e.message}${RETRY_BTN}</div>`;
     const cw = document.getElementById('wave-chart-wrap'); if (cw) cw.innerHTML = '';
   }
 }

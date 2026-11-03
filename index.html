@@ -159,6 +159,10 @@
     .day-min { color: var(--muted); }
     .day-rain { font-size: 10px; color: #90caf9; margin-top: 3px; }
 
+    /* Avertissement rouge : données non actualisées */
+    .warn-banner { background: rgba(239,83,80,0.12); border-bottom: 1px solid rgba(239,83,80,0.45);
+                   color: #ef9a9a; font-size: 11px; line-height: 1.4; padding: 7px 12px; }
+
     /* Encart lever / coucher du soleil */
     .sun-box { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 10px;
                background: var(--bg); border-radius: 7px; padding: 7px 10px; color: var(--muted); font-size: 11px; }
@@ -365,6 +369,7 @@
       <span id="meteo-search-status" style="font-size:11px;color:var(--muted)"></span>
     </div>
     <div class="card-body" style="padding:0">
+      <div id="meteo-warn" class="warn-banner" style="display:none"></div>
       <div class="meteo-section">
         <div class="section-lbl">📅 Prévisions semaine</div>
         <div class="week-row week-fill" id="week-wrap"><div class="loading">Chargement…</div></div>
@@ -443,6 +448,7 @@
         <div id="tide-source" style="font-size:10px;color:var(--muted);margin-top:6px"></div>
       </div>
       <div style="border-top:1px solid var(--border)"></div>
+      <div id="wave-warn" class="warn-banner" style="display:none"></div>
       <div id="wave-chart-wrap" style="padding:10px 12px 8px">
         <div class="loading">Chargement vagues…</div>
       </div>
@@ -619,10 +625,46 @@ async function fetchJSON(url, tries = 3) {
   }
   throw lastErr;
 }
-const RETRY_BTN = '<div style="margin-top:8px"><button class="btn btn-sm" onclick="refreshAll()">↺ Réessayer</button></div>';
+const RETRY_BTN  = '<div style="margin-top:8px"><button class="btn btn-sm" onclick="refreshAll()">↺ Réessayer</button></div>';
+const RETRY_LINK = '<a href="#" onclick="refreshAll();return false" style="color:var(--accent);white-space:nowrap">↺ Réessayer</a>';
+
+/* ── Dernières données reçues, gardées dans le navigateur (localStorage) pour les afficher
+      — avec un avertissement — quand une API ne répond plus. localStorage peut être indisponible
+      (navigation privée…) : tout est protégé, et la page fonctionne sans. ── */
+const CACHE_MAX_AGE_H = 48;   // au-delà, des prévisions aussi anciennes ne sont plus affichées
+function cacheSave(key, data) {
+  try { localStorage.setItem('mp:' + key, JSON.stringify({ t: Date.now(), data })); } catch (e) {}
+}
+function cacheLoad(key) {
+  try {
+    const o = JSON.parse(localStorage.getItem('mp:' + key));
+    if (o && o.data && (Date.now() - o.t) / 3_600_000 < CACHE_MAX_AGE_H) return o;
+  } catch (e) {}
+  return null;
+}
+function fmtSaved(t) {
+  const d = new Date(t);
+  return d.toLocaleDateString('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit' })
+    + ' à ' + d.toLocaleTimeString('fr-FR', { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
+}
+function setWarn(id, html) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = html || '';
+  el.style.display = html ? 'block' : 'none';
+}
+/* Retire des prévisions journalières les jours déjà passés (cas des données en cache) */
+function trimDaily(d, today) {
+  const i0 = d.time.findIndex(x => x.slice(0, 10) >= today);
+  if (i0 < 0) return null;
+  const o = {};
+  for (const k of Object.keys(d)) o[k] = Array.isArray(d[k]) ? d[k].slice(i0) : d[k];
+  return o;
+}
 
 async function fetchMeteo() {
   const loc = CFG[currentMeteoLoc];
+  const cacheKey = `meteo:${(+loc.lat).toFixed(3)},${(+loc.lon).toFixed(3)}`;
   // Une seule requête (horaire + journalier) au lieu de deux : moins de charge sur l'API
   const p = new URLSearchParams({
     latitude: loc.lat, longitude: loc.lon,
@@ -630,16 +672,38 @@ async function fetchMeteo() {
     daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,sunrise,sunset',
     timezone: 'Europe/Paris', forecast_days: 7,
   });
+  let data;
   try {
-    const data = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + p);
+    data = await fetchJSON('https://api.open-meteo.com/v1/forecast?' + p);
+  } catch (e) {
+    // L'API ne répond pas : on réaffiche les dernières données reçues, avec un avertissement
+    const c = cacheLoad(cacheKey);
+    const daily = c && trimDaily(c.data.daily, parisISO());
+    if (daily) {
+      renderMeteoSemaine(daily);
+      renderMeteoHeure(c.data.hourly);
+      setWarn('meteo-warn', `⚠ Météo non actualisée (${e.message}) — dernières données reçues le ${fmtSaved(c.t)}. ${RETRY_LINK}`);
+      return;
+    }
+    showMeteoError(e);
+    return;
+  }
+  cacheSave(cacheKey, { daily: data.daily, hourly: data.hourly });
+  setWarn('meteo-warn', '');
+  try {
     renderMeteoSemaine(data.daily);
     renderMeteoHeure(data.hourly);
   } catch (e) {
-    // On remplit toutes les zones : rien ne doit rester bloqué sur « Chargement… »
-    document.getElementById('week-wrap').innerHTML = `<div class="error" style="flex:1">Météo indisponible (${e.message})</div>`;
-    document.getElementById('sun-box').textContent = 'Indisponible';
-    document.getElementById('meteo-wrap').innerHTML = `<div class="error">Erreur météo : ${e.message}${RETRY_BTN}</div>`;
+    showMeteoError(e);
   }
+}
+
+function showMeteoError(e) {
+  // On remplit toutes les zones : rien ne doit rester bloqué sur « Chargement… »
+  setWarn('meteo-warn', '');
+  document.getElementById('week-wrap').innerHTML = `<div class="error" style="flex:1">Météo indisponible (${e.message})</div>`;
+  document.getElementById('sun-box').textContent = 'Indisponible';
+  document.getElementById('meteo-wrap').innerHTML = `<div class="error">Erreur météo : ${e.message}${RETRY_BTN}</div>`;
 }
 
 /* Lever / coucher du soleil, par jour (rempli par renderMeteoSemaine) */
@@ -1017,25 +1081,48 @@ async function fetchWaves() {
     forecast_days:   7,
   });
 
-  // Vagues et vent sont indépendants : si le vent est en panne, on affiche quand même les vagues
+  // Vagues et vent sont indépendants : si l'un est en panne, on affiche l'autre, et pour celui
+  // qui manque les dernières données reçues (avec avertissement) si on en a.
   const [mRes, wRes] = await Promise.allSettled([
     fetchJSON('https://marine-api.open-meteo.com/v1/marine?' + marineP),
     fetchJSON('https://api.open-meteo.com/v1/forecast?'      + windP),
   ]);
-  if (mRes.status === 'rejected') {
-    wrap.innerHTML = `<div class="error">Erreur vagues : ${mRes.reason.message}${RETRY_BTN}</div>`;
+
+  const showWaveError = msg => {
+    setWarn('wave-warn', '');
+    wrap.innerHTML = `<div class="error">Erreur vagues : ${msg}${RETRY_BTN}</div>`;
     const cw = document.getElementById('wave-chart-wrap'); if (cw) cw.innerHTML = '';
+  };
+
+  let marine = null, wind = null;
+  const stale = [];          // éléments affichés depuis le cache
+  let windMissing = null;    // message si le vent est absent
+  if (mRes.status === 'fulfilled') { marine = mRes.value.hourly; cacheSave('marine', marine); }
+  else {
+    const c = cacheLoad('marine');
+    if (!c) { showWaveError(mRes.reason.message); return; }
+    marine = c.data; stale.push(`vagues (reçues le ${fmtSaved(c.t)})`);
+  }
+  if (wRes.status === 'fulfilled') { wind = wRes.value.hourly; cacheSave('wind', wind); }
+  else {
+    const c = cacheLoad('wind');
+    if (c) { wind = c.data; stale.push(`vent (reçu le ${fmtSaved(c.t)})`); }
+    else   { windMissing = wRes.reason.message; }
+  }
+
+  try {
+    renderWaves(marine, wind);
+  } catch (e) {
+    showWaveError(e.message);
     return;
   }
-  try {
-    renderWaves(mRes.value.hourly, wRes.status === 'fulfilled' ? wRes.value.hourly : null);
-    if (wRes.status === 'rejected') {
-      wrap.insertAdjacentHTML('afterbegin',
-        `<div class="error" style="margin:8px 12px 0">Vent indisponible (${wRes.reason.message}) — les cases « Vent » restent vides.${RETRY_BTN}</div>`);
-    }
-  } catch (e) {
-    wrap.innerHTML = `<div class="error">Erreur vagues : ${e.message}${RETRY_BTN}</div>`;
-    const cw = document.getElementById('wave-chart-wrap'); if (cw) cw.innerHTML = '';
+  if (stale.length) {
+    const why = (mRes.status === 'rejected' ? mRes : wRes).reason.message;
+    setWarn('wave-warn', `⚠ Non actualisé (${why}) : ${stale.join(', ')}. ${RETRY_LINK}`);
+  } else if (windMissing) {
+    setWarn('wave-warn', `⚠ Vent indisponible (${windMissing}) — les cases « Vent » restent vides. ${RETRY_LINK}`);
+  } else {
+    setWarn('wave-warn', '');
   }
 }
 

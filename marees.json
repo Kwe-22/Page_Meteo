@@ -1,37 +1,8 @@
 {
   "source": "maree.shom.fr",
   "port": "Dahouet",
-  "updated": "2026-11-21T12:09:21.862Z",
+  "updated": "2026-11-22T12:18:13.765Z",
   "days": [
-    {
-      "date": "2026-11-21",
-      "extrema": [
-        {
-          "type": "PM",
-          "time": "03:48",
-          "height": 9.39,
-          "coef": 57
-        },
-        {
-          "type": "BM",
-          "time": "10:18",
-          "height": 3.45,
-          "coef": null
-        },
-        {
-          "type": "PM",
-          "time": "16:11",
-          "height": 9.78,
-          "coef": 64
-        },
-        {
-          "type": "BM",
-          "time": "22:47",
-          "height": 2.9,
-          "coef": null
-        }
-      ]
-    },
     {
       "date": "2026-11-22",
       "extrema": [
@@ -197,6 +168,35 @@
           "time": "20:57",
           "height": 11.1,
           "coef": 90
+        }
+      ]
+    },
+    {
+      "date": "2026-11-28",
+      "extrema": [
+        {
+          "type": "BM",
+          "time": "03:34",
+          "height": 1.85,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "09:13",
+          "height": 11.21,
+          "coef": 86
+        },
+        {
+          "type": "BM",
+          "time": "16:02",
+          "height": 1.79,
+          "coef": null
+        },
+        {
+          "type": "PM",
+          "time": "21:46",
+          "height": 10.63,
+          "coef": 82
         }
       ]
     }
